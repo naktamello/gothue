@@ -2,6 +2,8 @@
 
 #preinstalled modules
 import sys
+import operator
+
 #downloaded modules
 import numpy as np
 import cv2
@@ -16,7 +18,8 @@ class Object:
     def __init__(self, name="null"):
         self.type = "Object"
         self.Color = (0,0,0)
-        self.position = -1
+        self.position = 0
+        self.area = 0
         if name is "blue":
          #self.HSVmin = (92, 0, 0)
          #self.HSVmax = (124, 256, 256)
@@ -27,15 +30,20 @@ class Object:
          self.Color = DEF.RED
 
 def drawObject(theObjects, frame, temp, contours, hierarchy):
+    theObjects = (sorted(theObjects, key=operator.attrgetter('x')))
+
     while (len(theObjects)>0):
         thisObject = theObjects.pop()
         #contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
+        #print("last = " + str(len(contours)) + " position = "+str(thisObject.position))
+        #if (thisObject.position > (len(contours))):
+        #    print("breakpoint")
         cv2.drawContours(frame,contours,thisObject.position, thisObject.Color,5,5)
         coordinate = (thisObject.x,thisObject.y) #contains coordinates of the object: (int(moment['m10']/area))
         cv2.circle(frame, coordinate, 10, thisObject.Color) #draw circle at the object center
         text_org = (thisObject.x+10, thisObject.y)
         if thisObject.Color == DEF.RED:
-            obj_number = str(thisObject.position)
+            obj_number = str(len(theObjects))
             cv2.putText(frame, obj_number, text_org, cv2.FONT_HERSHEY_DUPLEX, 1, color_filters.COLOR_YELLOW)
         if thisObject.Color == DEF.BLUE:
             cv2.putText(frame, "Oreos", text_org, cv2.FONT_HERSHEY_DUPLEX, 1.2, thisObject.Color)
@@ -53,7 +61,7 @@ def morphOps(thresh):
 
 def trackFilteredObject(theObject, threshold, HSV, cameraFeed):
     temp = threshold.copy()
-    
+    objects = []
     _, contours, hierarchy = cv2.findContours(temp, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     objectFound = False
     #print hierarchy
@@ -67,6 +75,7 @@ def trackFilteredObject(theObject, threshold, HSV, cameraFeed):
               if area > DEF.AREA:
                 #print("area = %d" % area)
                 object = Object()
+                object.area = area
                 object.x = int(moment['m10']/area)
                 object.y = int(moment['m01']/area)
                 object.type = theObject.type
@@ -76,16 +85,18 @@ def trackFilteredObject(theObject, threshold, HSV, cameraFeed):
                 #print len(objects)
                 #print "area is greater than .."
                 objectFound = True
-              else: objectFound = False
-        
-              if objectFound is True:
-                   drawObject(objects,cameraFeed,temp,contours,hierarchy)
-                   #print "supposed to draw"
+              #else: objectFound = False
+
+    assert(len(objects) <= len(contours)), \
+        "objects: %d, contours: %d" % (len(objects), len(contours))
+
+    if objectFound is True:
+            drawObject(objects,cameraFeed,temp,contours,hierarchy)
+            #print "supposed to draw"
 
 
 # global variables #
 cap = cv2.VideoCapture("./p3.mp4") #putting '0' tries to load the default cam on the machine
-objects = [] #objects[] will hold the discovered objects; i.e. the "chilis' and 'oreos'
 
 # main #
 def main():
