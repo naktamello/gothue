@@ -8,6 +8,7 @@ import cv2
 
 #user files
 import color_filters
+import defines as DEF
 
 class Object:
     x = 0 #these will hold the coordinates of the object "centers". see moments of inertia
@@ -19,24 +20,24 @@ class Object:
         if name is "blue":
          #self.HSVmin = (92, 0, 0)
          #self.HSVmax = (124, 256, 256)
-         self.Color = (255, 0, 0)
+         self.Color = DEF.BLUE
         if name is "red":
          #self.HSVmin = (0, 200, 0)
          #self.HSVmax = (19, 255, 255)
-         self.Color = (0, 0, 255)
+         self.Color = DEF.RED
 
 def drawObject(theObjects, frame, temp, contours, hierarchy):
     while (len(theObjects)>0):
         thisObject = theObjects.pop()
         #contours[thisObject.position] = cv2.convexHull(contours[thisObject.position], returnPoints = True)
         cv2.drawContours(frame,contours,thisObject.position, thisObject.Color,5,5)
-        coordinate = (thisObject.x,thisObject.y)
-        cv2.circle(frame, coordinate, 10, thisObject.Color)
+        coordinate = (thisObject.x,thisObject.y) #contains coordinates of the object: (int(moment['m10']/area))
+        cv2.circle(frame, coordinate, 10, thisObject.Color) #draw circle at the object center
         text_org = (thisObject.x+10, thisObject.y)
-        if thisObject.Color == (0, 0, 255):
+        if thisObject.Color == DEF.RED:
             obj_number = str(thisObject.position)
             cv2.putText(frame, obj_number, text_org, cv2.FONT_HERSHEY_DUPLEX, 1, color_filters.COLOR_YELLOW)
-        if thisObject.Color == (255, 0, 0):
+        if thisObject.Color == DEF.BLUE:
             cv2.putText(frame, "Oreos", text_org, cv2.FONT_HERSHEY_DUPLEX, 1.2, thisObject.Color)
 
 def morphOps(thresh):
@@ -55,7 +56,7 @@ def trackFilteredObject(theObject, threshold, HSV, cameraFeed):
     
     _, contours, hierarchy = cv2.findContours(temp, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     objectFound = False
-    print hierarchy
+    #print hierarchy
     if contours is not None and len(contours) > 0:
         numObjects = len(contours)
         #print("objects = %d" % numObjects )
@@ -63,7 +64,7 @@ def trackFilteredObject(theObject, threshold, HSV, cameraFeed):
             for i in range (0, len(contours)):
               moment = cv2.moments(contours[i])
               area = moment['m00']
-              if area > 100:
+              if area > DEF.AREA:
                 #print("area = %d" % area)
                 object = Object()
                 object.x = int(moment['m10']/area)
@@ -82,13 +83,16 @@ def trackFilteredObject(theObject, threshold, HSV, cameraFeed):
                    #print "supposed to draw"
 
 
-
+# global variables #
 cap = cv2.VideoCapture("./p3.mp4") #putting '0' tries to load the default cam on the machine
 objects = [] #objects[] will hold the discovered objects; i.e. the "chilis' and 'oreos'
 
+# main #
 def main():
-  cv2.namedWindow('object discovered', cv2.WINDOW_NORMAL)
+  cv2.namedWindow('object_discovered', cv2.WINDOW_NORMAL)
+  cv2.resizeWindow('object_discovered', 1920/2,1080/2)
   color_filters.color_filter_init()
+
   while (cap.isOpened()):
     # Capture frame-by-frame
     _, frame = cap.read()
@@ -110,28 +114,35 @@ def main():
     upper_blue_hue_range = cv2.inRange(hsv, np.array(color_filters.blue.filter_settings['upper']['lowb']), np.array(color_filters.blue.filter_settings['upper']['upb']))
     threshold_blue = cv2.addWeighted(lower_blue_hue_range, float(color_filters.blue.filter_settings['weight']), upper_blue_hue_range, float(1.0-color_filters.blue.filter_settings['weight']), 0.0)
     threshold_blue_opened = morphOps(threshold_blue)
-    #trackFilteredObject(blue, threshold_blue_opened, hsv, frame)
+    trackFilteredObject(blue, threshold_blue_opened, hsv, frame)
 
+    #split channels then add filtered threshold (binary image) to the original
+    #this is done so that we can see how well the filter is working
     b,g,r = cv2.split(frame)
     b = cv2.addWeighted(threshold_red_opened, 0.6, b, 0.5, 0.1)
     g = cv2.addWeighted(threshold_red_opened, 0.6, g, 0.5, 0.1)
     r = cv2.addWeighted(threshold_red_opened, 0.6, r, 0.5, 0.1)
     frame = cv2.merge((b,g,r))
-    cv2.imshow('after', frame)
+    cv2.imshow('object_discovered', frame)
 
     #cv2.imshow('frame',threshold_red_opened)
     key_pressed = cv2.waitKey(1) & 0xFF
+
+    #press p for pause
     if key_pressed == ord('p'):
         while (1):
             key_pressed = cv2.waitKey(1) & 0xFF
             if key_pressed == ord('p'):
                 break
+    #press q to close the program
     if key_pressed == ord('q'):
         break
+    #press t to enable trackbars for filters (not working yet)
     if key_pressed == ord('t'):
         print "trackbar"
         color_filters.open_trackbar()
-         # When everything done, release the capture
+
+  # When everything done, release the capture
   cap.release()
   cv2.destroyAllWindows()
 
