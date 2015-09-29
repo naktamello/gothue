@@ -116,6 +116,7 @@ def main():
     lower_red_hue_range = cv2.inRange(hsv, np.array(color_filters.red.filter_settings['lower']['lowb']), np.array(color_filters.red.filter_settings['lower']['upb']))
     upper_red_hue_range = cv2.inRange(hsv, np.array(color_filters.red.filter_settings['upper']['lowb']), np.array(color_filters.red.filter_settings['upper']['upb']))
     threshold_red = cv2.addWeighted(lower_red_hue_range, float(color_filters.red.filter_settings['weight']), upper_red_hue_range, float(1.0-color_filters.red.filter_settings['weight']), 0.0)
+    threshold_red = cv2.GaussianBlur(threshold_red, (5,5), 0 )
     #morphoOps erodes & dilates sequentially to "open" the previously filtered hsv image
     threshold_red_opened = morphOps(threshold_red)
     threshold_red_opened = cv2.threshold(threshold_red_opened, 127, 255, cv2.THRESH_BINARY)[1]
@@ -130,13 +131,13 @@ def main():
     #split channels then add filtered threshold (binary image) to the original
     #this is done so that we can see how well the filter is working
     b,g,r = cv2.split(frame)
-    b = cv2.addWeighted(threshold_red_opened, 0.6, b, 0.5, 0.1)
-    g = cv2.addWeighted(threshold_red_opened, 0.6, g, 0.5, 0.1)
-    r = cv2.addWeighted(threshold_red_opened, 0.6, r, 0.5, 0.1)
+    b = cv2.addWeighted(threshold_red_opened, 0.8, b, 0.2, 0.1)
+    g = cv2.addWeighted(threshold_red_opened, 0.8, g, 0.2, 0.1)
+    r = cv2.addWeighted(threshold_red_opened, 0.8, r, 0.2, 0.1)
     frame = cv2.merge((b,g,r))
     cv2.imshow('object_discovered', frame)
 
-    #cv2.imshow('frame',threshold_red_opened)
+    #cv2.imshow('frame',threshold_red)
     key_pressed = cv2.waitKey(1) & 0xFF
 
     #press p for pause
