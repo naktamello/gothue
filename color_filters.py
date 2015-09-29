@@ -4,7 +4,6 @@ import numpy as np
 filter_red = {'lower':{'lowb' : [0,200,0], 'upb' : [19,255,255]}, 'upper':{'lowb' : [160,100,50], 'upb' : [179,255,255]}, 'weight': 0.5}
 filter_blue = {'lower':{'lowb' : [5,100,100], 'upb' : [10,255,255]}, 'upper':{'lowb' : [90,100,100], 'upb' : [137,255,255]}, 'weight': 0.0}
 
-COLOR_YELLOW = (255, 255, 255)
 
 class ColorFilter:
     def __init__(self, color, filter):
