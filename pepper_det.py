@@ -25,14 +25,29 @@ class App:
         self.cam = cap
         self.frame_idx = 0
 
-    def run(self, frame, frame_to_draw):
+    def run(self, frame, frame_to_draw, threshold):
             frames = []
+            lines = None
             frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             frame_copy = frame_to_draw.copy()
-            vis = frame.copy()
-            edges = cv2.Canny(frame_gray,50,150,apertureSize = 3)
+            frame_gray = cv2.equalizeHist(frame_gray)
+            edges = cv2.Canny(frame_gray,10,250,apertureSize = 3)
+            erodeElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(3,3))
+            dilateElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(3,3))
+            #edges = cv2.erode(edges,erodeElement,2)
+            edges = cv2.dilate(edges,dilateElement,1)
+            #edges = cv2.GaussianBlur(edges, (13,13), 0)
+            #lines = cv2.HoughLinesP(edges,1,np.pi/180,100,minLineLength=30,maxLineGap=5)
+            if lines is not None:
+                for line in lines:
+                    x1,y1,x2,y2 = line[0]
+                    cv2.line(frame_to_draw,(x1,y1),(x2,y2),DEF.BLUE,2)
             edges = cv2.bitwise_not(edges)
+            edges = cv2.adaptiveThreshold(edges,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,\
+            cv2.THRESH_BINARY,5,5)
+            #edges = cv2.threshold(edges, 150, 200, cv2.THRESH_TRUNC)
             edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+
 
             frame_copy = cv2.addWeighted(frame_copy, 0.5, edges, 0.5, 0.0)
 
@@ -57,11 +72,11 @@ class App:
                     if len(tr) > self.track_len:
                         del tr[0]
                     new_tracks.append(tr)
-                    cv2.circle(frame_to_draw, (x, y), 2, DEF.GREEN, -1)
+                    #cv2.circle(frame_to_draw, (x, y), 2, DEF.GREEN, -1)
                 self.tracks = new_tracks
                 #cv2.line(frame_to_draw,(x,y), tr[len(tr)-1], DEF.BLUE)
                 #cv2.poly
-                cv2.polylines(frame_to_draw, [np.int32(tr) for tr in self.tracks], False, DEF.GREEN)
+                #cv2.polylines(frame_to_draw, [np.int32(tr) for tr in self.tracks], False, DEF.GREEN)
                 frame_to_draw = cv2.addWeighted(frame_to_draw, 0.3, frame_copy, 0.7, 0.0)
                 if (len(self.tracks) > 0):
                     draw_str(frame_to_draw, (20, 20), 'track count: %d' % len(self.tracks))
@@ -76,12 +91,11 @@ class App:
                 mask = np.zeros_like(frame_gray)
                 mask[:] = 255
                 for x, y in [np.int32(tr[-1]) for tr in self.tracks]:
-                    cv2.circle(mask, (x, y), 5, 0, -1)
+                    #cv2.circle(mask, (x, y), 5, 0, -1)
+                    pass
                 p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **feature_params)
-                if p is not None:
-                    for x, y in np.float32(p).reshape(-1, 2):
-                        self.tracks.append([(x, y)])
-
+                for x, y in np.float32(p).reshape(-1, 2):
+                    self.tracks.append([(x, y)])
 
             self.frame_idx += 1
             self.prev_gray = frame_gray
@@ -118,7 +132,7 @@ def drawObject(theObjects, frame, temp, contours, hierarchy):
         #print("last = " + str(len(contours)) + " position = "+str(thisObject.position))
         #if (thisObject.position > (len(contours))):
         #    print("breakpoint")
-        cv2.drawContours(frame,contours,thisObject.position, thisObject.Color,5,5)
+        cv2.drawContours(frame,contours,thisObject.position, DEF.RED, 5, 5)
         coordinate = (thisObject.x,thisObject.y) #contains coordinates of the object: (int(moment['m10']/area))
         cv2.circle(frame, coordinate, 10, thisObject.Color) #draw circle at the object center
         text_org = (thisObject.x+10, thisObject.y)
@@ -216,12 +230,12 @@ def main():
         #split channels then add filtered threshold (binary image) to the original
         #this is done so that we can see how well the filter is working
         b,g,r = cv2.split(frame)
-        b = cv2.addWeighted(threshold_red_opened, 0.7, b, 0.3, 0.1)
-        g = cv2.addWeighted(threshold_red_opened, 0.7, g, 0.3, 0.1)
-        r = cv2.addWeighted(threshold_red_opened, 0.7, r, 0.3, 0.1)
+        b = cv2.addWeighted(threshold_red_opened, 0.5, b, 0.5, 0.1)
+        g = cv2.addWeighted(threshold_red_opened, 0.5, g, 0.5, 0.1)
+        r = cv2.addWeighted(threshold_red_opened, 0.5, r, 0.5, 0.1)
         frame = cv2.merge((b,g,r))
 
-        frames = opflow.run(orig_frame, frame)
+        frames = opflow.run(orig_frame, frame, threshold_red_opened)
         #cv2.add(vis, frame, frame)
         #cv2.imshow('object_discovered', frame)
 
@@ -231,6 +245,10 @@ def main():
         cv2.imshow('frame', frames[1])
     if mode is '2':
         cv2.imshow('frame', frame)
+    if mode is '3':
+        cv2.imshow('frame', threshold_red_opened)
+    if mode is '4':
+        cv2.imshow('frame', orig_frame)
 
     key_pressed = cv2.waitKey(1) & 0xFF
 
@@ -241,6 +259,10 @@ def main():
         elif mode is '1':
             mode = '2'
         elif mode is '2':
+            mode = '3'
+        elif mode is '3':
+            mode = '4'
+        elif mode is '4':
             mode = '0'
     #press p for pause
     if key_pressed == ord('p'):
