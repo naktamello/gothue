@@ -5,6 +5,7 @@ import sys
 import operator
 from common import anorm2, draw_str
 from time import clock
+import math
 
 #downloaded modules
 import numpy as np
@@ -52,7 +53,7 @@ class App:
         self.frame_idx = 0
         #camera movement tracking
         self.track_len = 10
-        self.detect_interval = 5
+        self.detect_interval =4
         self.camera_tracker = self.__camera_tracker(self)
 
     def next_frame(self):
@@ -104,9 +105,52 @@ class App:
             self.des_prev = None
             self.matches = None
             self.dist = None
-            
+            self.avg_dis =[]
+            self.mean = [0,0]
+
+        def draw_arrow(self, canvas, origin):
+            angle = math.atan2(self.mean[1],self.mean[0]) - math.pi/4
+            mag = math.sqrt(math.pow(self.mean[1],2) + math.pow(self.mean[0],2) )
+            width = int(1*mag)
+            length = int(5*mag)
+            print("mag = %f angle = %f" % (mag, angle))
+            head_width = int(width *2.2)
+            head_length = int(width *2)
+            x = origin[0]
+            y = origin[1]
+            rot = np.asarray([[np.cos(angle), -np.sin(angle)],[np.sin(angle), np.cos(angle)]], np.float32)
+            print(rot)
+            top_left = [-length/2, width/2]
+            top_right = [length/2, width/2]
+            bottom_left = [-length/2, -width/2]
+            bottom_right = [length/2, -width/2]
+            arrow_head_0 = [length/2, head_width/2]
+            arrow_head_1 = [length/2 + head_length, 0]
+            arrow_head_2 = [length/2, -head_width/2]
+            top_left = np.dot(rot, top_left).astype(int) + origin
+            top_right = np.dot(rot, top_right).astype(int) + origin
+            bottom_left = np.dot(rot, bottom_left).astype(int) + origin
+            bottom_right = np.dot(rot, bottom_right).astype(int) + origin
+            arrow_head_0 = np.dot(rot, arrow_head_0).astype(int) + origin
+            arrow_head_1 = np.dot(rot, arrow_head_1).astype(int) + origin
+            arrow_head_2 = np.dot(rot, arrow_head_2).astype(int) + origin
+            polygon = [top_left, top_right, bottom_left, bottom_right]
+            #polygon = np.array(polygon, np.int32)
+            #polygon = polygon.reshape((-1,1,2))
+            #line = [[polygon[0],polygon[1]]]
+            cv2.line(canvas, tuple(top_left), tuple(top_right), DEF.GREEN,3)
+            cv2.line(canvas, tuple(bottom_left), tuple(bottom_right), DEF.GREEN,3)
+            cv2.line(canvas, tuple(top_left), tuple(bottom_left), DEF.GREEN,3)
+            cv2.line(canvas, tuple(top_right), tuple(arrow_head_0), DEF.GREEN,3)
+            cv2.line(canvas, tuple(bottom_right), tuple(arrow_head_2), DEF.GREEN, 3)
+            cv2.line(canvas, tuple(arrow_head_0), tuple(arrow_head_1), DEF.GREEN, 3)
+            cv2.line(canvas, tuple(arrow_head_1), tuple(arrow_head_2), DEF.GREEN, 3)
+            #cv2.polylines(canvas, polygon, False, DEF.RED)
+            pass
+
         def track_features(self, this_frame, frame_idx, threshold, canvas):
             threshold = None
+            self.draw_arrow(canvas, (1920/2,200))
             if frame_idx%self.detect_interval == 0:
                 orb = cv2.ORB_create()
                 self.kp = orb.detect(this_frame, threshold)
@@ -121,18 +165,19 @@ class App:
                     self.dist = [m.distance for m in self.matches]
                     thresh_dist = (sum(self.dist)/len(self.dist))*0.5
                     self.dist = [m for m in self.matches if m.distance < thresh_dist]
+                if len(self.avg_dis) > 0 and self.matches:
+                    self.mean = [np.mean(self.avg_dis[0]), np.mean(self.avg_dis[1])]
             if self.kp and self.kp_prev:
                 #cv2.drawKeypoints(canvas,self.kp_prev,canvas,DEF.GREEN,0)
                 #cv2.drawKeypoints(canvas,self.kp,canvas,DEF.BLUE,0)
                 pass
             if self.matches:
+                self.avg_dis = []
                 for m in self.dist:
                     prev_p = (int(self.kp_prev[m.trainIdx].pt[0]), int(self.kp_prev[m.trainIdx].pt[1]))
                     this_p = (int(self.kp[m.queryIdx].pt[0]), int(self.kp[m.queryIdx].pt[1]))
-                    print((prev_p[0]-this_p[0]))
-                    print("Delta X: %d  Delta Y: %d" % ((prev_p[0]-this_p[0]), (prev_p[1]-this_p[1])))
-                    cv2.line(canvas, prev_p, this_p, DEF.BLUE, 5)
-
+                    self.avg_dis.append([(prev_p[0]-this_p[0]), (prev_p[1]-this_p[1])])
+                    #cv2.line(canvas, prev_p, this_p, DEF.BLUE, 5)
 
 
     def run(self):
@@ -145,8 +190,8 @@ class App:
             self.camera_tracker.track_features(frame, self.frame_idx, red_threshold, canvas)
 
             frame_w_fruit = cv2.bitwise_and(frame,cv2.cvtColor(red_threshold, cv2.COLOR_GRAY2BGR))
-            #frame_w_canvas = cv2.bitwise_or(frame, canvas)
-            frame_w_canvas = canvas
+            frame_w_canvas = cv2.bitwise_or(frame, canvas)
+            #frame_w_canvas = canvas
             frame_w_edges = cv2.bitwise_and(frame, edges)
 
             frames = {'original':frame,'fruit':frame_w_fruit, 'canvas':frame_w_canvas, 'edges':frame_w_edges}
@@ -237,7 +282,7 @@ def trackFilteredObject(theObject, threshold, HSV, thisFrame):
 
 #########################################################
 #########################################################
-APP = App("Gothue tracking", "./p2.mp4")
+APP = App("Gothue tracking", "./p4.mp4")
 
 def main():
     mode = '0'
