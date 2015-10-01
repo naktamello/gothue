@@ -9,6 +9,7 @@ from time import clock
 #downloaded modules
 import numpy as np
 import cv2
+import cProfile
 
 #user files
 import color_filters as FT
@@ -23,26 +24,45 @@ class App:
     def __init__(self, name, video_src):
         #common
         self.name = name
+
+        cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(name, 1920/2,1080/2)
+
         global capture
         capture = cv2.VideoCapture(video_src)
         self.cam = capture
+
         global frame
         _, frame = capture.read()
+        global prev_frame
+        prev_frame = frame
+        global frame_gray
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        global prev_gray
+        prev_gray = frame_gray
+
         global canvas, edges
         canvas = np.zeros_like(frame)
         edges = np.zeros_like(frame)
-        global frame_gray
-        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        global gothue, red_filter
+        gothue = Object("pepper_red")
+        red_filter = FT.ColorFilter("red", FT.filter_red)
+
         self.frame_idx = 0
         #camera movement tracking
         self.track_len = 10
         self.detect_interval = 5
+        self.camera_tracker = self.__camera_tracker(self)
 
     def next_frame(self):
-        global frame, frame_gray, canvas
+        global frame, frame_gray, prev_gray, canvas
+        prev_frame = frame
         _, frame = capture.read()
+        prev_gray = frame_gray
         frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         canvas = np.zeros_like(frame)
+        self.frame_idx += 1
 
     def video_status(self):
         return capture.isOpened()
@@ -71,72 +91,65 @@ class App:
         return edges
     
     class __camera_tracker:
-        def __init__(self, frame, prev_gray):
+        def __init__(self, app):
             self.tracks = []
-            self.frame = frame
-            self.prev_gray = prev_gray
+            self.detect_interval = app.detect_interval
+            global frame
+            self.p_frame = np.zeros_like(frame)
+            self.p_threshold = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
+            self.kp_pairs = None
+            self.kp = None
+            self.kp_prev = None
+            self.des = None
+            self.des_prev = None
+            self.matches = None
+            self.dist = None
             
-        def track_features(self):
-            global canvas
-            if len(self.tracks) > 0:
-                gray0, gray1 = self.prev_gray, cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
-                d_x_mean = 0
-                d_y_mean = 0
-                p0 = np.float32([track[-1] for track in self.tracks]).reshape(-1, 1, 2)
-                p1, st, err = cv2.calcOpticalFlowPyrLK(gray0, gray1, p0, None, **lk_params)
-                p0r, st, err = cv2.calcOpticalFlowPyrLK(gray1, gray0, p1, None, **lk_params)
-                d_abs= abs(p0-p0r).reshape(-1, 2).max(-1)
-                d_raw = (p0-p0r).reshape(-1,2).max(-1)
-                if (len(d_raw) > 1):
-                    d_x_mean = d_raw[0].mean()
-                    d_y_mean = d_raw[1].mean()
-                good = d_abs < 1
-                new_tracks = []
-                for tr, (x, y), good_flag in zip(self.tracks, p1.reshape(-1, 2), good):
-                    if not good_flag:
-                        continue
-                    tr.append((x, y))
-                    if len(tr) > self.track_len:
-                        del tr[0]
-                    new_tracks.append(tr)
-                    #cv2.circle(canvas, (x, y), 2, DEF.GREEN, -1)
-                self.tracks = new_tracks
-                #cv2.line(canvas,(x,y), tr[len(tr)-1], DEF.BLUE)
-                #cv2.poly
-                #cv2.polylines(canvas, [np.int32(tr) for tr in self.tracks], False, DEF.GREEN)
-                if (len(self.tracks) > 0):
-                    draw_str(canvas, (20, 20), 'track count: %d' % len(self.tracks))
-                    draw_str(canvas, (20, 40), 'mean travel: %f' %np.mean(d))
-                    draw_str(canvas, (20, 60), 'dX: %f' %d_x_mean)
-                    draw_str(canvas, (20, 80), 'dY: %f' %d_y_mean)
-                else:
-                    cv2.putText(canvas, "lost track", (20, 30), cv2.FONT_HERSHEY_DUPLEX, 1, DEF.RED)
-            else:
-                canvas = cv2.addWeighted(canvas, 0.3, frame_w_edges, 0.7, 0.0)
-            if self.frame_idx % self.detect_interval == 0:
-                mask = np.zeros_like(frame_gray)
-                mask[:] = 255
-                for x, y in [np.int32(tr[-1]) for tr in self.tracks]:
-                    #cv2.circle(mask, (x, y), 5, 0, -1)
-                    pass
-                p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **feature_params)
-                for x, y in np.float32(p).reshape(-1, 2):
-                    self.tracks.append([(x, y)])
+        def track_features(self, this_frame, frame_idx, threshold, canvas):
+            threshold = None
+            if frame_idx%self.detect_interval == 0:
+                orb = cv2.ORB_create()
+                self.kp = orb.detect(this_frame, threshold)
+                self.kp_prev = orb.detect(self.p_frame, self.p_threshold)
+                self.kp, self.des = orb.compute(this_frame, self.kp)
+                self.kp_prev, self.des_prev = orb.compute(self.p_frame, self.kp_prev)
+                self.p_frame = this_frame
+                self.p_threshold = threshold
+                bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+                if self.des_prev is not None:
+                    self.matches = bf.match(self.des, self.des_prev)
+                    self.dist = [m.distance for m in self.matches]
+                    thresh_dist = (sum(self.dist)/len(self.dist))*0.5
+                    self.dist = [m for m in self.matches if m.distance < thresh_dist]
+            if self.kp and self.kp_prev:
+                #cv2.drawKeypoints(canvas,self.kp_prev,canvas,DEF.GREEN,0)
+                #cv2.drawKeypoints(canvas,self.kp,canvas,DEF.BLUE,0)
+                pass
+            if self.matches:
+                for m in self.dist:
+                    prev_p = (int(self.kp_prev[m.trainIdx].pt[0]), int(self.kp_prev[m.trainIdx].pt[1]))
+                    this_p = (int(self.kp[m.queryIdx].pt[0]), int(self.kp[m.queryIdx].pt[1]))
+                    print((prev_p[0]-this_p[0]))
+                    print("Delta X: %d  Delta Y: %d" % ((prev_p[0]-this_p[0]), (prev_p[1]-this_p[1])))
+                    cv2.line(canvas, prev_p, this_p, DEF.BLUE, 5)
+
+
 
     def run(self):
             frames = []
-            global canvas
+            global frame, prev_frame, prev_gray, canvas, red_filter, gothue
+            hsv, red_threshold = red_filter.apply_filter(frame)
             edges = self.__find_edges(frame)
-            b,g,r = cv2.split(frame)
-            z = np.zeros_like(b)
-            o = np.ones_like(b)*255
-            #frame_w_canvas = cv2.merge((b,g,r,cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)))
-            frame_w_canvas = cv2.bitwise_or(frame, canvas)
-            frame_w_edges = cv2.bitwise_and(frame, edges)
-            self.frame_idx += 1
-            self.prev_gray = frame_gray
+            canvas_copy=canvas.copy()
+            trackFilteredObject(gothue, red_threshold, hsv, canvas)
+            self.camera_tracker.track_features(frame, self.frame_idx, red_threshold, canvas)
 
-            frames = {'original':frame, 'canvas':frame_w_canvas, 'edges':frame_w_edges}
+            frame_w_fruit = cv2.bitwise_and(frame,cv2.cvtColor(red_threshold, cv2.COLOR_GRAY2BGR))
+            #frame_w_canvas = cv2.bitwise_or(frame, canvas)
+            frame_w_canvas = canvas
+            frame_w_edges = cv2.bitwise_and(frame, edges)
+
+            frames = {'original':frame,'fruit':frame_w_fruit, 'canvas':frame_w_canvas, 'edges':frame_w_edges}
             return frames
             #return mask
 
@@ -146,6 +159,7 @@ class App:
     def close(self):
         capture.release()
         cv2.destroyAllWindows()
+
 
 class Object:
     x = 0 #these will hold the coordinates of the object "centers". see moments of inertia
@@ -160,8 +174,8 @@ class Object:
         if name is "blue":
          self.color = DEF.BLUE
 
+
 def drawObject(theObjects, frame, contours, hierarchy):
-    print("drawObjects")
     #sort objects by x coordinate
     theObjects = (sorted(theObjects, key=operator.attrgetter('x')))
 
@@ -218,33 +232,31 @@ def trackFilteredObject(theObject, threshold, HSV, thisFrame):
             #print "supposed to draw"
 
 
+
+
+
+#########################################################
+#########################################################
 APP = App("Gothue tracking", "./p2.mp4")
 
-
 def main():
-    cv2.namedWindow('frame', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('frame', 1920/2,1080/2)
     mode = '0'
     paused = False
-    red_filter = FT.ColorFilter("red", FT.filter_red)
+
     while APP.video_status():
-        gothue = Object("pepper_red")
+        if not paused:
+            frames = APP.run()
 
-        frames = APP.run()
-        APP.next_frame()
-        hsv, red_threshold = red_filter.apply_filter(frames['original'])
+            APP.next_frame()
 
-        trackFilteredObject(gothue, red_threshold, hsv, frames['canvas'])
-
-
-        if mode is '0':
-            APP.show_video(frames['original'])
-        if mode is '1':
-            APP.show_video(frames['canvas'])
-        if mode is '2':
-            APP.show_video(frames['edges'])
-        if mode is '3':
-            cv2.imshow(APP.name, cv2.bitwise_and(frames['original'],cv2.cvtColor(red_threshold, cv2.COLOR_GRAY2BGR)))
+            if mode is '0':
+                APP.show_video(frames['original'])
+            if mode is '1':
+                APP.show_video(frames['fruit'])
+            if mode is '2':
+                APP.show_video(frames['canvas'])
+            if mode is '3':
+                APP.show_video(frames['edges'])
 
         key_pressed = cv2.waitKey(1) & 0xFF
 

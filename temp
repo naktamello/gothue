@@ -1,0 +1,45 @@
+            global canvas
+            if len(self.tracks) > 0:
+                gray0, gray1 = self.prev_gray, cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+                d_x_mean = 0
+                d_y_mean = 0
+                p0 = np.float32([track[-1] for track in self.tracks]).reshape(-1, 1, 2)
+                p1, st, err = cv2.calcOpticalFlowPyrLK(gray0, gray1, p0, None, **lk_params)
+                p0r, st, err = cv2.calcOpticalFlowPyrLK(gray1, gray0, p1, None, **lk_params)
+                d_abs= abs(p0-p0r).reshape(-1, 2).max(-1)
+                d_raw = (p0-p0r).reshape(-1,2).max(-1)
+                if (len(d_raw) > 1):
+                    d_x_mean = d_raw[0].mean()
+                    d_y_mean = d_raw[1].mean()
+                good = d_abs < 1
+                new_tracks = []
+                for tr, (x, y), good_flag in zip(self.tracks, p1.reshape(-1, 2), good):
+                    if not good_flag:
+                        continue
+                    tr.append((x, y))
+                    if len(tr) > self.track_len:
+                        del tr[0]
+                    new_tracks.append(tr)
+                    #cv2.circle(canvas, (x, y), 2, DEF.GREEN, -1)
+                self.tracks = new_tracks
+                #cv2.line(canvas,(x,y), tr[len(tr)-1], DEF.BLUE)
+                #cv2.poly
+                #cv2.polylines(canvas, [np.int32(tr) for tr in self.tracks], False, DEF.GREEN)
+                if (len(self.tracks) > 0):
+                    draw_str(canvas, (20, 20), 'track count: %d' % len(self.tracks))
+                    draw_str(canvas, (20, 40), 'mean travel: %f' %np.mean(d_abs))
+                    draw_str(canvas, (20, 60), 'dX: %f' %d_x_mean)
+                    draw_str(canvas, (20, 80), 'dY: %f' %d_y_mean)
+                else:
+                    cv2.putText(canvas, "lost track", (20, 30), cv2.FONT_HERSHEY_DUPLEX, 1, DEF.RED)
+            else:
+                pass
+            if self.frame_idx % self.detect_interval == 0:
+                mask = np.zeros_like(frame_gray)
+                mask[:] = 255
+                for x, y in [np.int32(tr[-1]) for tr in self.tracks]:
+                    #cv2.circle(mask, (x, y), 5, 0, -1)
+                    pass
+                p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **feature_params)
+                for x, y in np.float32(p).reshape(-1, 2):
+                    self.tracks.append([(x, y)])
