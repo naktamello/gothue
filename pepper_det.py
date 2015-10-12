@@ -11,6 +11,10 @@ import math
 import numpy as np
 import cv2
 import cProfile
+from matplotlib import pyplot as plt
+import pylab as P
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtGui, QtCore
 
 #user files
 import color_filters as FT
@@ -20,6 +24,11 @@ import defines as DEF
 feature_params = dict( maxCorners = 100, qualityLevel = 0.3, minDistance = 7, blockSize = 7)
 lk_params = dict( winSize = (15, 15), maxLevel = 2, criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
 
+
+#win = pg.GraphicsWindow()
+#win.resize(640,480)
+#win.setWindowTitle('histogram: distance')
+#plot1=win.addPlot()
 
 class App:
     def __init__(self, name, video_src):
@@ -99,13 +108,13 @@ class App:
             self.p_frame = np.zeros_like(frame)
             self.p_threshold = np.zeros_like(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
             self.kp_pairs = None
-            self.kp = None
-            self.kp_prev = None
+            self.key_pt_new = None
+            self.key_pt_old = None
             self.des = None
             self.des_prev = None
             self.matches = None
             self.dist = None
-            self.avg_dis =[]
+            self.difference =[]
             self.mean = [0,0]
 
         def draw_arrow(self, canvas, origin):
@@ -113,13 +122,12 @@ class App:
             mag = math.sqrt(math.pow(self.mean[1],2) + math.pow(self.mean[0],2) )
             width = int(1*mag)
             length = int(5*mag)
-            print("mag = %f angle = %f" % (mag, angle))
+            #print("mag = %f angle = %f" % (mag, angle))
             head_width = int(width *2.2)
             head_length = int(width *2)
             x = origin[0]
             y = origin[1]
             rot = np.asarray([[np.cos(angle), -np.sin(angle)],[np.sin(angle), np.cos(angle)]], np.float32)
-            print(rot)
             top_left = [-length/2, width/2]
             top_right = [length/2, width/2]
             bottom_left = [-length/2, -width/2]
@@ -148,15 +156,17 @@ class App:
             #cv2.polylines(canvas, polygon, False, DEF.RED)
             pass
 
+
+
         def track_features(self, this_frame, frame_idx, threshold, canvas):
             threshold = None
             self.draw_arrow(canvas, (1920/2,200))
             if frame_idx%self.detect_interval == 0:
                 orb = cv2.ORB_create()
-                self.kp = orb.detect(this_frame, threshold)
-                self.kp_prev = orb.detect(self.p_frame, self.p_threshold)
-                self.kp, self.des = orb.compute(this_frame, self.kp)
-                self.kp_prev, self.des_prev = orb.compute(self.p_frame, self.kp_prev)
+                self.key_pt_new = orb.detect(this_frame, threshold)
+                self.key_pt_old = orb.detect(self.p_frame, self.p_threshold)
+                self.key_pt_new, self.des = orb.compute(this_frame, self.key_pt_new)
+                self.key_pt_old, self.des_prev = orb.compute(self.p_frame, self.key_pt_old)
                 self.p_frame = this_frame
                 self.p_threshold = threshold
                 bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
@@ -165,18 +175,19 @@ class App:
                     self.dist = [m.distance for m in self.matches]
                     thresh_dist = (sum(self.dist)/len(self.dist))*0.5
                     self.dist = [m for m in self.matches if m.distance < thresh_dist]
-                if len(self.avg_dis) > 0 and self.matches:
-                    self.mean = [np.mean(self.avg_dis[0]), np.mean(self.avg_dis[1])]
-            if self.kp and self.kp_prev:
-                #cv2.drawKeypoints(canvas,self.kp_prev,canvas,DEF.GREEN,0)
-                #cv2.drawKeypoints(canvas,self.kp,canvas,DEF.BLUE,0)
+                if len(self.difference) > 0 and self.matches:
+                    #draw_histogram(self.difference, -500, 500, 100)
+                    self.mean = [np.mean(self.difference[0]), np.mean(self.difference[1])]
+            if self.key_pt_new and self.key_pt_old:
+                #cv2.drawKeypoints(canvas,self.key_pt_old,canvas,DEF.GREEN,0)
+                #cv2.drawKeypoints(canvas,self.key_pt_new,canvas,DEF.BLUE,0)
                 pass
             if self.matches:
-                self.avg_dis = []
+                self.difference = []
                 for m in self.dist:
-                    prev_p = (int(self.kp_prev[m.trainIdx].pt[0]), int(self.kp_prev[m.trainIdx].pt[1]))
-                    this_p = (int(self.kp[m.queryIdx].pt[0]), int(self.kp[m.queryIdx].pt[1]))
-                    self.avg_dis.append([(prev_p[0]-this_p[0]), (prev_p[1]-this_p[1])])
+                    prev_p = (int(self.key_pt_old[m.trainIdx].pt[0]), int(self.key_pt_old[m.trainIdx].pt[1]))
+                    this_p = (int(self.key_pt_new[m.queryIdx].pt[0]), int(self.key_pt_new[m.queryIdx].pt[1]))
+                    self.difference.append([(prev_p[0]-this_p[0]), (prev_p[1]-this_p[1])])
                     #cv2.line(canvas, prev_p, this_p, DEF.BLUE, 5)
 
 
@@ -204,6 +215,21 @@ class App:
     def close(self):
         capture.release()
         cv2.destroyAllWindows()
+
+
+def draw_histogram(data, min, max, steps):
+    hist_bin = []
+
+    for x in xrange(steps):
+        increment = int(round((max-min)/steps,2))
+        hist_bin.append(min + increment*x)
+    n, hist_bin, patches = P.hist(data[0], hist_bin, normed=1, histtype='bar', rwidth=0.8)
+    data = np.array(data, np.int32).swapaxes(0,1)
+    y,x = np.histogram(data[0], hist_bin)
+    curve = pg.PlotCurveItem(x,y,stepMode=True, fillLevel = 0, brush = (0,0,255,80))
+    #plot1.clear()
+    #plot1.addItem(curve)
+
 
 
 class Object:
@@ -277,6 +303,9 @@ def trackFilteredObject(theObject, threshold, HSV, thisFrame):
             #print "supposed to draw"
 
 
+#class Gothue:
+
+
 
 
 
@@ -287,24 +316,26 @@ APP = App("Gothue tracking", "./p4.mp4")
 def main():
     mode = '0'
     paused = False
-
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out = cv2.VideoWriter('output.avi',fourcc, 20.0, (1920,1080))
+    frame_cnt = 0
+    i = 0
     while APP.video_status():
         if not paused:
             frames = APP.run()
-
             APP.next_frame()
 
-            if mode is '0':
-                APP.show_video(frames['original'])
-            if mode is '1':
-                APP.show_video(frames['fruit'])
-            if mode is '2':
-                APP.show_video(frames['canvas'])
-            if mode is '3':
-                APP.show_video(frames['edges'])
+
+        if mode is '0':
+            APP.show_video(frames['original'])
+        if mode is '1':
+            APP.show_video(frames['fruit'])
+        if mode is '2':
+            APP.show_video(frames['canvas'])
+        if mode is '3':
+            APP.show_video(frames['edges'])
 
         key_pressed = cv2.waitKey(1) & 0xFF
-
         #press m to change display mode
         if key_pressed == ord('m'):
             if mode is '0':
