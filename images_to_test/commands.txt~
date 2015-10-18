@@ -1,0 +1,12 @@
+perl createsamples.pl pos.txt bg.txt samples 1500 /home/camel/workspace/openCV/opencv-master/cmake_build_folder/bin/opencv_createsamples -bgcolor 0 -bgthresh 0 -maxxangle 1.1 -maxyangle 1.1 maxzangle 0.5 -maxidev 40 -w 80 -h 40
+
+find negative -type f -maxdepth 1 > negative.txt
+
+./opencv_createsamples -img positives/extracting_gauge_needle.png -num 10 -bg negatives.dat -vec samples.vec -maxxangle 0.6 -maxyangle 0 -maxzangle 0.3 -maxidev 100 -bgcolor 0 -bgthresh 0 -w 20 -h 20
+
+
+
+./opencv_createsamples -img positives/extracting_gauge_needle.png -num 100 -bg negatives.dat -info info.dat -maxxangle 0.6 -maxyangle 0 -maxzangle 0.3 -maxidev 100 -bgcolor 0 -bgthresh 0 -w 40 -h 40
+
+
+
