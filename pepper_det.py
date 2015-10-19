@@ -36,7 +36,7 @@ class App:
         self.name = name
 
         cv2.namedWindow(name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(name, 1920/2,10q80/2)
+        cv2.resizeWindow(name, 1920/2,1080/2)
 
         global capture
         capture = cv2.VideoCapture(video_src)
