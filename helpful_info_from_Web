@@ -1,0 +1,22 @@
+A few years ago I tried the same thing as an excercise. I started with basically 
+the same method you suggested, because the matlab documentation guided me that
+way. 
+It is good to mention, that for any practical use there a two critical points for
+the performace. The first and most critical is to find the middle of the dial, which can be
+solved by solid camera calibration but if the gauge changes physically in 
+the picture most papers I found said that they let the user point out the
+middle of the dial. 
+The second one is the look of the dial itself. If you face a precission measurement
+instrument, chances are it has a very clean dial and a needle pointer.
+In that case you can easily tranform the picture to binary and search for 
+activeted pixels in a small range. 
+
+I endded up selecting the middle of the dial myself once. Then I just 
+grayscaled the images (extracted from a video stream) and applied a 
+polar transform. To find the pointer I used the longest line the Hough Transform
+found in a preselected width spanning over the markings an some of the pointer.
+You can get the reading very
+easily that way because you know the range (min and full scale deflection) of 
+the dial and you can scale the image when transforming using the polor coordinates.
+Hence, if the resulting image is 720px high, and the longest line starts in
+row 360 the pointer deflection is 180 degree.
