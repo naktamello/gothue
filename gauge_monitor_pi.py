@@ -1,29 +1,14 @@
 #!/usr/bin/python2.7
 
-#preinstalled modules
-import sys
-import operator
-from common import anorm2, draw_str
-from time import clock
-import math
 
 #downloaded modules
 import numpy as np
 import cv2
-import cProfile
-from matplotlib import pyplot as plt
-import pylab as P
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
-import pepper_det as pep
-
-#user files
-import color_filters as FT
-import defines as DEF
+import cv2.cv as cv
 
 def main():
     #parameters
-    file = "./images_to_test/query/gauge.jpg"
+    file = "./gauge.jpg"
     draw = True
     hough_circle = True
     hough_line = True
@@ -35,11 +20,11 @@ def main():
     line_thickness = 2
 
     #setup
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    #cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     im = cv2.imread(file)
     gray_im = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
     canvas = np.zeros_like(im)
-    np.copyto(canvas, im)
+    canvas = np.array(im)
     prep = gray_im
     m,n = gray_im.shape
     mask = np.zeros_like(prep)
@@ -61,7 +46,7 @@ def main():
 
     #Hough transforms (circles, lines, plines)
     if hough_circle:
-        circles = cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, np.array([]), 20, 60, m/10)[0]
+        circles = cv2.HoughCircles(gray_im, cv.CV_HOUGH_GRADIENT, 2, 10, np.array([]), 20, 60, m/10)[0]
         for c in circles[:1]:
             cv2.circle(mask, (c[0],c[1]), int(c[2]*scale_factor), (255,255,255), -1)
             #mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
@@ -83,6 +68,7 @@ def main():
             circle_y = c[1]
             radius = int(c[2])
     first = True
+    lines = np.swapaxes(lines,0,1)
     for line in lines[:3]:
         for (rho, theta) in line:
             # blue for infinite lines (only draw the 5 strongest)
@@ -132,6 +118,7 @@ def main():
         angle += 180
     cv2.putText(canvas,"angle:"+str(angle),(int(m*0.2),int(n*0.9)),cv2.FONT_HERSHEY_PLAIN,2,(200,50,0),3)
 
+    plines=np.swapaxes(plines,0,1)
     for pline in plines[:10]:
         for l in pline:
              # red for line segments
@@ -140,10 +127,11 @@ def main():
 
     if draw:
         canvas = np.concatenate((im, canvas), axis = 1)
-        cv2.imshow(window_name,canvas)
+        #cv2.imshow(window_name,canvas)
     else:
-        cv2.imshow(window_name,prep)
-    cv2.waitKey(0)
+        pass
+        #cv2.imshow(window_name,prep)
+    #cv2.waitKey(0)
 
     # save the resulting image
     if draw:
