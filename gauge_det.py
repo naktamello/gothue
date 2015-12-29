@@ -15,7 +15,6 @@ from matplotlib import pyplot as plt
 import pylab as P
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
-import pepper_det as pep
 
 #user files
 import color_filters as FT
@@ -23,7 +22,7 @@ import defines as DEF
 
 def main():
     #parameters
-    file = "./images_to_test/query/gauge.jpg"
+    file = "./test.jpg"
     draw = True
     hough_circle = True
     hough_line = True
@@ -52,7 +51,7 @@ def main():
     if do_threshold:
         #create structuring element that will be used to "dilate" and "erode" image.
         #the element chosen here is a 3px by 3px rectangle
-        prep = cv2.threshold(prep, 150, 255, cv2.THRESH_BINARY_INV)[1]
+        prep = cv2.threshold(prep, 50, 255, cv2.THRESH_BINARY_INV)[1]
         erodeElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(3,3))
         #dilate with larger element so make sure object is nicely visible
         dilateElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(4,4))
@@ -102,7 +101,7 @@ def main():
                 cv2.line(line_mask, pt1, pt2, (255,255,255), rect_height) #mask width is quarter of circle radius found above
                 mask = cv2.bitwise_and(mask, line_mask)
                 M = cv2.getRotationMatrix2D((x0,y0),(theta *360 / (2 * np.pi))-90,1)
-
+    before_masking = prep
     prep = cv2.bitwise_and(prep, mask)
     density = cv2.warpAffine(prep,M,(m,n))
     density_rect_width = radius*2
@@ -130,7 +129,8 @@ def main():
                 right_density += 1
     if left_density > right_density:
         angle += 180
-    cv2.putText(canvas,"angle:"+str(angle),(int(m*0.2),int(n*0.9)),cv2.FONT_HERSHEY_PLAIN,2,(200,50,0),3)
+
+    cv2.putText(canvas,"angle:"+str(angle),(int(m*0.4),int(n*0.6)),cv2.FONT_HERSHEY_PLAIN,2,(200,50,0),3)
 
     for pline in plines[:10]:
         for l in pline:
@@ -149,6 +149,9 @@ def main():
     if draw:
         cv2.imwrite("res.jpg",canvas)
 
+    f = open('./gauge_angle.txt', 'w')
+    f.write("angle:"+str(angle)+"\n")
+    f.close()
 
 if __name__ == "__main__":
     main()

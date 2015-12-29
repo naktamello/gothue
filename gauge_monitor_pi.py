@@ -5,10 +5,13 @@
 import numpy as np
 import cv2
 import cv2.cv as cv
-
+import time
+#user module
+import email_from_monitor as email
+import temp_sensor
 def main():
     #parameters
-    file = "./gauge.jpg"
+    file = "./test.jpg"
     draw = True
     hough_circle = True
     hough_line = True
@@ -37,7 +40,7 @@ def main():
     if do_threshold:
         #create structuring element that will be used to "dilate" and "erode" image.
         #the element chosen here is a 3px by 3px rectangle
-        prep = cv2.threshold(prep, 150, 255, cv2.THRESH_BINARY_INV)[1]
+        prep = cv2.threshold(prep, 50, 255, cv2.THRESH_BINARY_INV)[1]
         erodeElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(3,3))
         #dilate with larger element so make sure object is nicely visible
         dilateElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(4,4))
@@ -117,7 +120,6 @@ def main():
     if left_density > right_density:
         angle += 180
     cv2.putText(canvas,"angle:"+str(angle),(int(m*0.2),int(n*0.9)),cv2.FONT_HERSHEY_PLAIN,2,(200,50,0),3)
-
     plines=np.swapaxes(plines,0,1)
     for pline in plines[:10]:
         for l in pline:
@@ -136,6 +138,17 @@ def main():
     # save the resulting image
     if draw:
         cv2.imwrite("res.jpg",canvas)
+        time.sleep(1)
+
+    temperature = temp_sensor.read_temp()
+    f = open('gauge_angle.txt', 'w')
+    f.write("angle:"+str(angle)+"\n")
+    f.write("temperature:"+str(temperature))
+    f.close()
+    email.sendMail( ["joejsy@gmail.com"],
+            "this is the subject",
+            "this is the body text of the email",
+            ["res.jpg","gauge_angle.txt"] )
 
 
 if __name__ == "__main__":
