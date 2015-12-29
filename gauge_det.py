@@ -57,10 +57,12 @@ def main():
         dilateElement = cv2.getStructuringElement( cv2.MORPH_ELLIPSE,(4,4))
         prep = cv2.erode(prep,erodeElement,1)
         prep = cv2.dilate(prep,dilateElement,1)
-
     #Hough transforms (circles, lines, plines)
     if hough_circle:
-        circles = cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, np.array([]), 20, 60, m/10)[0]
+        circles = cv2.HoughCircles(gray_im, cv2.HOUGH_GRADIENT, 2, 10, None, param1 = 50, param2 = 30,minRadius = m/10, maxRadius = 0,)
+        if circles is None:
+            debug = 0
+        circles = circles[0]
         for c in circles[:1]:
             cv2.circle(mask, (c[0],c[1]), int(c[2]*scale_factor), (255,255,255), -1)
             #mask=cv2.threshold(mask, 128, 255,cv2.THRESH_BINARY)
@@ -103,7 +105,7 @@ def main():
                 M = cv2.getRotationMatrix2D((x0,y0),(theta *360 / (2 * np.pi))-90,1)
     before_masking = prep
     prep = cv2.bitwise_and(prep, mask)
-    density = cv2.warpAffine(prep,M,(m,n))
+    density = cv2.warpAffine(prep,M,(n,m))
     density_rect_width = radius*2
     if density_rect_width % 2 is not 0:
         density_rect_width -= 1
